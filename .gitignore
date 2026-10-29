@@ -1,0 +1,19 @@
+#ignoring env files
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules/
+.env
+.env.*
+!.env.example
+**/.next/
+frontend/*.tsbuildinfo
+backend/bin/
+backend/tripplanner-api
+frontend/public/assets/*
+!frontend/public/assets/seaside.jpg
+
+# local output and internal planning artifacts
+*.log
+.DS_Store
+docs/superpowers/

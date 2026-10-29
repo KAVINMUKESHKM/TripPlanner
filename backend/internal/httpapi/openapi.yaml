@@ -116,6 +116,65 @@ paths:
           description: Session ended; expires the session cookie
         '403':
           $ref: '#/components/responses/Forbidden'
+  /auth/logout-all:
+    post:
+      tags: [Authentication]
+      summary: Revoke every session for the signed-in user
+      operationId: logoutAll
+      security:
+        - cookieAuth: []
+      responses:
+        '204':
+          description: All sessions were revoked and the current cookie was cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /auth/password/forgot:
+    post:
+      tags: [Authentication]
+      summary: Request a password-reset email
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '202':
+          description: Reset instructions will be sent if the account exists
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /auth/password/reset:
+    post:
+      tags: [Authentication]
+      summary: Set a new password using a single-use reset token
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+      responses:
+        '204':
+          description: Password changed and all sessions were revoked
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /auth/me:
     get:
       tags: [Authentication]

@@ -1,11 +1,12 @@
 package httpapi
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"encoding/json"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -13,10 +14,11 @@ import (
 var openAPISpec []byte
 
 type Dependencies struct {
-	Ready  func(context.Context) error
-	Auth   http.Handler
-	Places http.Handler
-	Trips  http.Handler
+	Ready   func(context.Context) error
+	Limiter RequestLimiter
+	Auth    http.Handler
+	Places  http.Handler
+	Trips   http.Handler
 }
 
 func NewRouter(deps Dependencies) http.Handler {
@@ -51,7 +53,57 @@ func NewRouter(deps Dependencies) http.Handler {
 		}
 		health(w, r)
 	})
-	return withTimeout(mux)
+	var handler http.Handler = withTimeout(securityHeaders(mux))
+	if deps.Limiter != nil {
+		handler = withTimeout(securityHeaders(rateLimitMiddleware(deps.Limiter, mux)))
+	}
+	return requestLogger(handler)
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (r *responseRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
+
+func (r *responseRecorder) WriteHeader(status int) {
+	if r.wroteHeader {
+		return
+	}
+	r.status = status
+	r.wroteHeader = true
+	r.ResponseWriter.WriteHeader(status)
+}
+
+func (r *responseRecorder) Write(body []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	return r.ResponseWriter.Write(body)
+}
+
+func requestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		recorder := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(recorder, r)
+		log.Printf("http request method=%s path=%q status=%d duration=%s", r.Method, r.URL.Path, recorder.status, time.Since(started).Round(time.Millisecond))
+	})
+}
+
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if strings.HasPrefix(r.URL.Path, "/api/v1/auth/") {
+			w.Header().Set("Cache-Control", "no-store")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func serveOpenAPISpec(w http.ResponseWriter, _ *http.Request) {
@@ -69,12 +121,12 @@ func swaggerDocs(w http.ResponseWriter, _ *http.Request) {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Trip Planner API — Swagger UI</title>
-    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.33.3/swagger-ui.css" />
     <style>body{margin:0;background:#eae0d5}.swagger-ui .topbar{background:#22333b}.swagger-ui .topbar-wrapper .link span{visibility:hidden}.swagger-ui .topbar-wrapper .link:after{content:"Trip Planner API";color:#eae0d5;font-weight:600;visibility:visible}</style>
   </head>
   <body>
     <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <script src="https://unpkg.com/swagger-ui-dist@5.33.3/swagger-ui-bundle.js"></script>
     <script>window.onload=()=>window.SwaggerUIBundle({url:"/openapi.yaml",dom_id:"#swagger-ui",deepLinking:true,persistAuthorization:false,displayRequestDuration:true,filter:true,tryItOutEnabled:true,withCredentials:true});</script>
   </body>
 </html>`))
@@ -96,37 +148,8 @@ func withTimeout(next http.Handler) http.Handler {
 
 func timeoutHandler(next http.Handler, timeout time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		result := make(chan struct{})
-		buffer := &bufferResponseWriter{header: make(http.Header)}
-		go func() { next.ServeHTTP(buffer, r); close(result) }()
-		select {
-		case <-result:
-			for key, values := range buffer.header {
-				w.Header()[key] = values
-			}
-			w.WriteHeader(buffer.status)
-			_, _ = w.Write(buffer.body.Bytes())
-		case <-time.After(timeout):
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "request timeout"})
-		}
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-type bufferResponseWriter struct {
-	header http.Header
-	body   bytes.Buffer
-	status int
-}
-
-func (w *bufferResponseWriter) Header() http.Header { return w.header }
-func (w *bufferResponseWriter) WriteHeader(status int) {
-	if w.status == 0 {
-		w.status = status
-	}
-}
-func (w *bufferResponseWriter) Write(body []byte) (int, error) {
-	if w.status == 0 {
-		w.status = http.StatusOK
-	}
-	return w.body.Write(body)
 }

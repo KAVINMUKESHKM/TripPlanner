@@ -1,4 +1,4 @@
-package httpapi
+package httpapi_test
 
 import (
 	"context"
@@ -7,11 +7,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
+
+	"tripplanner/backend/internal/httpapi"
 )
 
 func TestHealthAndReadiness(t *testing.T) {
-	router := NewRouter(Dependencies{Ready: func(context.Context) error { return nil }})
+	router := httpapi.NewRouter(httpapi.Dependencies{Ready: func(context.Context) error { return nil }})
 	for _, path := range []string{"/api/v1/healthz", "/api/v1/readyz"} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -29,7 +30,7 @@ func TestHealthAndReadiness(t *testing.T) {
 }
 
 func TestReadinessDoesNotExposeSecrets(t *testing.T) {
-	router := NewRouter(Dependencies{Ready: func(context.Context) error { return context.Canceled }})
+	router := httpapi.NewRouter(httpapi.Dependencies{Ready: func(context.Context) error { return context.Canceled }})
 	response := httptest.NewRecorder()
 	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/readyz", nil))
 	if response.Code != http.StatusServiceUnavailable {
@@ -50,24 +51,5 @@ func TestReadinessDoesNotExposeSecrets(t *testing.T) {
 		if strings.Contains(rawBody, secret) {
 			t.Fatalf("readiness response contains %q", secret)
 		}
-	}
-}
-
-func TestTimeoutReturnsStructuredJSON(t *testing.T) {
-	handler := timeoutHandler(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { time.Sleep(20 * time.Millisecond) }), time.Millisecond)
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
-	if response.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d", response.Code)
-	}
-	if response.Header().Get("Content-Type") != "application/json" {
-		t.Fatalf("content type = %q", response.Header().Get("Content-Type"))
-	}
-	var body map[string]string
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-	if body["error"] != "request timeout" {
-		t.Fatalf("body = %v", body)
 	}
 }

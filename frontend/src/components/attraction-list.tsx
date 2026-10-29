@@ -10,6 +10,27 @@ import Collapse from "@mui/material/Collapse";
 import CircularProgress from "@mui/material/CircularProgress";
 import TextField from "@mui/material/TextField";
 
+function externalURL(value: string): string | undefined {
+  try {
+    const normalized = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value : `https://${value}`;
+    const url = new URL(normalized);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function wikipediaURL(value: string): string | undefined {
+  const [language, ...title] = value.split(":");
+  if (!/^[a-z][a-z0-9-]{1,11}$/i.test(language) || title.length === 0) return undefined;
+  return `https://${language.toLowerCase()}.wikipedia.org/wiki/${encodeURIComponent(title.join(":").trim().replaceAll(" ", "_"))}`;
+}
+
+function wheelchairLabel(value: string): string {
+  const labels: Record<string, string> = { yes: "Wheelchair access · Yes", no: "Wheelchair access · No", limited: "Wheelchair access · Limited", designated: "Wheelchair access · Designated" };
+  return labels[value.toLowerCase()] ?? `Wheelchair access · ${value}`;
+}
+
 export function AttractionList({ attractions, selectedIds, onAdd, onFocus }: { attractions: Attraction[]; selectedIds: Set<number>; onAdd: (place: Attraction) => void; onFocus: (place: Attraction) => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All places");
@@ -44,12 +65,31 @@ export function AttractionList({ attractions, selectedIds, onAdd, onFocus }: { a
     <div className="places-results-scroll" role="region" aria-label="Suggested places" tabIndex={0}>
     {filtered.length ? <ul className="place-list">{filtered.map((place) => {
       const added = selectedIds.has(place.id);
+      const website = place.website ? externalURL(place.website) : undefined;
+      const wikipedia = place.wikipedia ? wikipediaURL(place.wikipedia) : undefined;
+      const wikidata = place.wikidata && /^Q[1-9]\d*$/.test(place.wikidata) ? `https://www.wikidata.org/wiki/${place.wikidata}` : undefined;
+      const hasVisitorDetails = place.address || place.opening_hours || place.wheelchair || place.fee || place.toilets || place.toilets_wheelchair || place.internet_access || website || place.phone || wikipedia || wikidata;
       return <li className="place-card" key={place.id}>
-        <div className="place-info"><span className="place-kind">{place.category || "Worth a stop"}</span><h3><button className="place-focus" type="button" onClick={() => onFocus(place)} aria-label={`Show ${place.name} on the map`}>{place.name}</button></h3><p>{place.description || "A place to take your time and have a look around."}</p>{place.source_url ? <a className="place-source" href={place.source_url} target="_blank" rel="noreferrer">OpenStreetMap ↗</a> : null}</div>
+        <div className="place-info"><span className="place-kind">{place.category || "Worth a stop"}</span><h3><button className="place-focus" type="button" onClick={() => onFocus(place)} aria-label={`Show ${place.name} on the map`}>{place.name}</button></h3><p>{place.description || "No description is available from the mapped sources yet."}</p>{place.source_url ? <a className="place-source" href={place.source_url} target="_blank" rel="noreferrer">OpenStreetMap ↗</a> : null}</div>
         <Button className="add-place" size="small" variant={added ? "outlined" : "contained"} onClick={() => onAdd(place)} disabled={added} aria-label={added ? `${place.name} already added` : `Add ${place.name} to your day`}>{added ? "Added" : "Add"}</Button>
         <div className="place-actions-extra"><Button size="small" onClick={() => toggleRestaurants(place.id)} aria-expanded={expandedId === place.id}>{expandedId === place.id ? "Hide details" : "Details & nearby food"}</Button></div>
         <Collapse className="restaurant-collapse" in={expandedId === place.id} unmountOnExit>
         <div className="restaurant-panel">
+          <h4>Visiting details</h4>
+          {hasVisitorDetails ? <div className="attraction-detail-facts">
+            {place.address ? <span><strong>Address</strong>{place.address}</span> : null}
+            {place.opening_hours ? <span><strong>Hours</strong>{place.opening_hours}</span> : null}
+            {place.wheelchair ? <span><strong>Accessibility</strong>{wheelchairLabel(place.wheelchair)}</span> : null}
+            {place.fee ? <span><strong>Entry fee</strong>{place.fee === "yes" ? "Fee may apply" : place.fee === "no" ? "No fee listed" : place.fee}</span> : null}
+            {place.toilets ? <span><strong>Toilets</strong>{place.toilets === "yes" ? "Available" : place.toilets}</span> : null}
+            {place.toilets_wheelchair ? <span><strong>Accessible toilets</strong>{place.toilets_wheelchair}</span> : null}
+            {place.internet_access ? <span><strong>Internet access</strong>{place.internet_access}</span> : null}
+            {place.phone ? <span><strong>Phone</strong>{place.phone}</span> : null}
+            {website ? <a href={website} target="_blank" rel="noopener noreferrer">Official website ↗</a> : null}
+            {wikipedia ? <a href={wikipedia} target="_blank" rel="noopener noreferrer">Wikipedia ↗</a> : null}
+            {wikidata ? <a href={wikidata} target="_blank" rel="noopener noreferrer">Wikidata ↗</a> : null}
+          </div> : <p className="restaurant-empty">No visiting details have been mapped for this place yet.</p>}
+          {place.details_updated_at ? <p className="restaurant-empty">OpenStreetMap details checked {new Date(place.details_updated_at).toLocaleDateString()} · confirm hours before visiting.</p> : null}
           <div className="attraction-detail-facts">
             {place.best_climate ? <span><strong>Best climate</strong>{place.best_climate}</span> : null}
             {place.ideal_weather ? <span><strong>Ideal weather</strong>{place.ideal_weather}</span> : null}

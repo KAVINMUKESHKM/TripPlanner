@@ -1,9 +1,11 @@
-package config
+package config_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"tripplanner/backend/internal/config"
 )
 
 func TestLoadDotEnvReadsFileWithoutOverridingProcessEnvironment(t *testing.T) {
@@ -23,7 +25,7 @@ func TestLoadDotEnvReadsFileWithoutOverridingProcessEnvironment(t *testing.T) {
 	if err := os.WriteFile(path, []byte(fileValueKey+"=from-file\n"+processValueKey+"=from-file\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := LoadDotEnv(path); err != nil {
+	if err := config.LoadDotEnv(path); err != nil {
 		t.Fatal("LoadDotEnv returned an error")
 	}
 	if got := os.Getenv(fileValueKey); got != "from-file" {

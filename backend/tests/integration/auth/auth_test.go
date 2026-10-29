@@ -12,13 +12,13 @@ import (
 
 	"tripplanner/backend/internal/auth"
 	"tripplanner/backend/internal/db"
-	"tripplanner/backend/internal/testutil"
+	"tripplanner/backend/tests/testutil"
 )
 
 func TestRegisterLoginMeAndLogoutUseOpaqueSession(t *testing.T) {
 	database := testutil.StartPostGIS(t)
 	database.CreateLegacySchema(t)
-	if err := db.Apply(context.Background(), database.Pool, "../../migrations"); err != nil {
+	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
 	server := auth.NewHandler(database.Pool, auth.Options{CookieSecure: false, AllowedOrigin: "http://localhost:3000"}).Routes()
@@ -81,7 +81,7 @@ func TestRegisterLoginMeAndLogoutUseOpaqueSession(t *testing.T) {
 func TestExpiredSessionRejected(t *testing.T) {
 	database := testutil.StartPostGIS(t)
 	database.CreateLegacySchema(t)
-	if err := db.Apply(context.Background(), database.Pool, "../../migrations"); err != nil {
+	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
 	server := auth.NewHandler(database.Pool, auth.Options{CookieSecure: false, AllowedOrigin: "http://localhost:3000"}).Routes()
@@ -139,7 +139,7 @@ func TestLegacyPasswordAccountKeepsItsIDAndHash(t *testing.T) {
 	if _, err := database.Pool.Exec(context.Background(), "UPDATE users SET password=$1 WHERE id=41", legacyHash); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Apply(context.Background(), database.Pool, "../../migrations"); err != nil {
+	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
 	server := auth.NewHandler(database.Pool, auth.Options{CookieSecure: false, AllowedOrigin: "http://localhost:3000"}).Routes()

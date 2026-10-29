@@ -91,6 +91,9 @@ export const register = (input: { email: string; password: string; full_name: st
 export const login = (input: { email: string; password: string }) =>
   request<User>("/auth/login", { method: "POST", body: JSON.stringify(input) });
 export const logout = () => request<void>("/auth/logout", { method: "POST" });
+export const logoutAll = () => request<void>("/auth/logout-all", { method: "POST" });
+export const requestPasswordReset = (email: string) => request<{ message: string }>("/auth/password/forgot", { method: "POST", body: JSON.stringify({ email }) });
+export const resetPassword = (token: string, password: string) => request<void>("/auth/password/reset", { method: "POST", body: JSON.stringify({ token, password }) });
 export const currentUser = () => request<User>("/auth/me");
 export const googleSignInURL = `${API_BASE}/api/v1/auth/google`;
 

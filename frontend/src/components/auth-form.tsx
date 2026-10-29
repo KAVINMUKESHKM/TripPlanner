@@ -40,6 +40,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
       <TextField required fullWidth label="Password" type="password" helperText="Use at least 8 characters." slotProps={{ htmlInput: { minLength: 8 } }} autoComplete={isSignup ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} />
       {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
       <Button className="auth-submit" type="submit" variant="contained" size="large" disabled={busy}>{busy ? "Please wait…" : isSignup ? "Create your account" : "Sign in"}</Button>
+      {!isSignup ? <p className="auth-switch"><Link href="/forgot-password">Forgot your password?</Link></p> : null}
       <Divider>or continue with</Divider>
       <Button className="auth-submit" component="a" href={googleSignInURL} variant="outlined" size="large">Continue with Google</Button>
       <p className="auth-switch">{isSignup ? "Already have an account?" : "New to Trip Planner?"} <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Sign in" : "Create an account"}</Link></p>

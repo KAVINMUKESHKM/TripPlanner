@@ -1,10 +1,14 @@
-package config
+package config_test
 
-import "testing"
+import (
+	"testing"
+
+	"tripplanner/backend/internal/config"
+)
 
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
-	if _, err := Load(); err == nil {
+	if _, err := config.Load(); err == nil {
 		t.Fatal("Load() should reject a missing DATABASE_URL")
 	}
 }
@@ -15,7 +19,7 @@ func TestLoadReadsDatabaseURLAndOptionalProviderKeys(t *testing.T) {
 	t.Setenv("SERP_API_KEY", "serp-key")
 	t.Setenv("OPENCAGE_API_KEY", "geo-key")
 	t.Setenv("OSRM_BASE_URL", "https://router.project-osrm.org")
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
@@ -30,7 +34,7 @@ func TestLoadAcceptsLegacyWeatherAndSerpKeyNames(t *testing.T) {
 	t.Setenv("OPEN_WEATHER_KEY", "legacy-weather")
 	t.Setenv("SERP_API_KEY", "")
 	t.Setenv("SERP_KEY", "legacy-serp")
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}

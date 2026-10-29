@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"tripplanner/backend/internal/db"
-	"tripplanner/backend/internal/testutil"
+	"tripplanner/backend/tests/testutil"
 )
 
 func TestApplyPreservesLegacyRowsAndIsRepeatable(t *testing.T) {
 	testDB := testutil.StartPostGIS(t)
 	testDB.CreateLegacySchema(t)
 	ctx := context.Background()
-	migrations := filepath.Join("..", "..", "migrations")
+	migrations := filepath.Join("..", "..", "..", "migrations")
 	if err := db.Apply(ctx, testDB.Pool, migrations); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestApplyPreservesLegacyRowsAndIsRepeatable(t *testing.T) {
 	if attractionID != 101 || locationWKT != "POINT(77.5946 12.9716)" {
 		t.Fatalf("legacy attraction changed: id=%d location=%q", attractionID, locationWKT)
 	}
-	for _, table := range []string{"sessions", "trips", "trip_days", "trip_stops"} {
+	for _, table := range []string{"sessions", "trips", "trip_days", "trip_stops", "api_rate_limits", "password_reset_tokens"} {
 		var exists bool
 		if err := testDB.Pool.QueryRow(ctx, "SELECT to_regclass($1) IS NOT NULL", table).Scan(&exists); err != nil {
 			t.Fatal(err)

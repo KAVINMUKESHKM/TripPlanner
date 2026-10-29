@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"tripplanner/backend/internal/db"
-	"tripplanner/backend/internal/testutil"
 	"tripplanner/backend/internal/trips"
+	"tripplanner/backend/tests/testutil"
 )
 
 func setupRepository(t *testing.T) (*testutil.PostGISDatabase, *trips.Repository) {
 	t.Helper()
 	testDB := testutil.StartPostGIS(t)
 	testDB.CreateLegacySchema(t)
-	if err := db.Apply(context.Background(), testDB.Pool, filepath.Join("..", "..", "migrations")); err != nil {
+	if err := db.Apply(context.Background(), testDB.Pool, filepath.Join("..", "..", "..", "migrations")); err != nil {
 		t.Fatalf("apply migrations: %v", err)
 	}
 	return testDB, trips.NewRepository(testDB.Pool)

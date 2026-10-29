@@ -17,8 +17,19 @@ export type Attraction = {
   latitude: number | string;
   longitude: number | string;
   source_url?: string;
-  image?: string;
   address?: string;
+  opening_hours?: string;
+  wheelchair?: string;
+  website?: string;
+  phone?: string;
+  fee?: string;
+  toilets?: string;
+  toilets_wheelchair?: string;
+  internet_access?: string;
+  wikipedia?: string;
+  wikidata?: string;
+  details_updated_at?: string;
+  image?: string;
   rating?: number;
 };
 

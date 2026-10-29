@@ -12,7 +12,7 @@ import (
 	"golang.org/x/oauth2"
 	"tripplanner/backend/internal/auth"
 	"tripplanner/backend/internal/db"
-	"tripplanner/backend/internal/testutil"
+	"tripplanner/backend/tests/testutil"
 )
 
 type fixedIdentityVerifier struct {
@@ -27,7 +27,7 @@ func (v fixedIdentityVerifier) Verify(context.Context, string, string) (auth.Goo
 func TestGoogleOAuthCreatesAccountSessionAndConsumesStateOnce(t *testing.T) {
 	database := testutil.StartPostGIS(t)
 	database.CreateLegacySchema(t)
-	if err := db.Apply(context.Background(), database.Pool, "../../migrations"); err != nil {
+	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,11 +57,19 @@ func TestGoogleOAuthCreatesAccountSessionAndConsumesStateOnce(t *testing.T) {
 		t.Fatalf("weak OAuth state %q", state)
 	}
 	callback := httptest.NewRecorder()
-	server.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?state="+url.QueryEscape(state)+"&code=test-code", nil))
+	callbackRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?state="+url.QueryEscape(state)+"&code=test-code", nil)
+	callbackRequest.AddCookie(start.Result().Cookies()[0])
+	server.ServeHTTP(callback, callbackRequest)
 	if callback.Code != http.StatusFound || !strings.HasPrefix(callback.Header().Get("Location"), "http://localhost:3000/auth/callback") {
 		t.Fatalf("callback status=%d location=%q body=%s", callback.Code, callback.Header().Get("Location"), callback.Body.String())
 	}
-	if len(callback.Result().Cookies()) != 1 || callback.Result().Cookies()[0].Name != "trip_session" {
+	var issuedSession bool
+	for _, cookie := range callback.Result().Cookies() {
+		if cookie.Name == "trip_session" && cookie.Value != "" {
+			issuedSession = true
+		}
+	}
+	if !issuedSession {
 		t.Fatalf("OAuth callback did not issue session cookie: %#v", callback.Result().Cookies())
 	}
 	var userID int64
@@ -82,7 +90,7 @@ func TestGoogleOAuthCreatesAccountSessionAndConsumesStateOnce(t *testing.T) {
 func TestGoogleOAuthRejectsUnverifiedEmail(t *testing.T) {
 	database := testutil.StartPostGIS(t)
 	database.CreateLegacySchema(t)
-	if err := db.Apply(context.Background(), database.Pool, "../../migrations"); err != nil {
+	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
 	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +104,9 @@ func TestGoogleOAuthRejectsUnverifiedEmail(t *testing.T) {
 	redirect, _ := url.Parse(start.Header().Get("Location"))
 	state := redirect.Query().Get("state")
 	callback := httptest.NewRecorder()
-	server.ServeHTTP(callback, httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?state="+url.QueryEscape(state)+"&code=test-code", nil))
+	callbackRequest := httptest.NewRequest(http.MethodGet, "/api/v1/auth/google/callback?state="+url.QueryEscape(state)+"&code=test-code", nil)
+	callbackRequest.AddCookie(start.Result().Cookies()[0])
+	server.ServeHTTP(callback, callbackRequest)
 	if callback.Code != http.StatusForbidden {
 		t.Fatalf("unverified callback status=%d body=%s", callback.Code, callback.Body.String())
 	}

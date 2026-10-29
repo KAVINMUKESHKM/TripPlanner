@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/mail"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/oauth2"
@@ -20,6 +22,7 @@ type Options struct {
 	GoogleOAuth    *oauth2.Config
 	GoogleVerifier IdentityVerifier
 	FrontendURL    string
+	SMTP           SMTPConfig
 }
 type Handler struct {
 	pool           *pgxpool.Pool
@@ -28,6 +31,7 @@ type Handler struct {
 	googleOAuth    *oauth2.Config
 	googleVerifier IdentityVerifier
 	frontendURL    string
+	smtp           SMTPConfig
 }
 type credentials struct {
 	Email    string `json:"email"`
@@ -36,7 +40,7 @@ type credentials struct {
 }
 
 func NewHandler(pool *pgxpool.Pool, options Options) *Handler {
-	return &Handler{pool: pool, cookieSecure: options.CookieSecure, allowedOrigin: strings.TrimRight(options.AllowedOrigin, "/"), googleOAuth: options.GoogleOAuth, googleVerifier: options.GoogleVerifier, frontendURL: strings.TrimRight(options.FrontendURL, "/")}
+	return &Handler{pool: pool, cookieSecure: options.CookieSecure, allowedOrigin: strings.TrimRight(options.AllowedOrigin, "/"), googleOAuth: options.GoogleOAuth, googleVerifier: options.GoogleVerifier, frontendURL: strings.TrimRight(options.FrontendURL, "/"), smtp: options.SMTP}
 }
 
 func (h *Handler) Routes() http.Handler {
@@ -44,6 +48,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", h.register)
 	mux.HandleFunc("POST /api/v1/auth/login", h.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", h.logout)
+	mux.Handle("POST /api/v1/auth/logout-all", h.RequireAuth(http.HandlerFunc(h.logoutAll)))
+	mux.HandleFunc("POST /api/v1/auth/password/forgot", h.forgotPassword)
+	mux.HandleFunc("POST /api/v1/auth/password/reset", h.resetPassword)
 	mux.Handle("GET /api/v1/auth/me", h.RequireAuth(http.HandlerFunc(h.me)))
 	mux.HandleFunc("GET /api/v1/auth/google", h.googleStart)
 	mux.HandleFunc("GET /api/v1/auth/google/callback", h.googleCallback)
@@ -78,9 +85,11 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "could not create account")
+		log.Printf("auth register: database insert failed: %v", err)
 		return
 	}
-	if err := h.issueSession(w, user); err != nil {
+	if err := h.issueSession(w, r, user); err != nil {
+		log.Printf("auth register: session creation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "could not create session")
 		return
 	}
@@ -98,11 +107,17 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var user User
 	var hash string
 	err := h.pool.QueryRow(r.Context(), `SELECT id,COALESCE(username,''),email,COALESCE(full_name,''),password FROM users WHERE lower(email)=lower($1)`, strings.TrimSpace(input.Email)).Scan(&user.ID, &user.Username, &user.Email, &user.FullName, &hash)
-	if err != nil || !VerifyPassword(hash, input.Password) {
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && !VerifyPassword(hash, input.Password)) {
 		writeError(w, http.StatusUnauthorized, ErrInvalidCredentials.Error())
 		return
 	}
-	if err := h.issueSession(w, user); err != nil {
+	if err != nil {
+		log.Printf("auth login: database lookup failed: %v", err)
+		writeError(w, http.StatusServiceUnavailable, "sign-in is temporarily unavailable")
+		return
+	}
+	if err := h.issueSession(w, r, user); err != nil {
+		log.Printf("auth login: session creation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "could not create session")
 		return
 	}
@@ -115,7 +130,23 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	if cookie, err := r.Cookie(sessionCookieName); err == nil {
 		hash := sha256Bytes(cookie.Value)
-		_, _ = h.pool.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hash[:])
+		if _, err := h.pool.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hash[:]); err != nil {
+			log.Printf("auth logout: session revoke failed: %v", err)
+		}
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) logoutAll(w http.ResponseWriter, r *http.Request) {
+	if !h.checkOrigin(w, r) {
+		return
+	}
+	user, _ := UserFromContext(r.Context())
+	if _, err := h.pool.Exec(r.Context(), "DELETE FROM sessions WHERE user_id=$1", user.ID); err != nil {
+		log.Printf("auth logout-all: session revoke failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "could not revoke sessions")
+		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: "", Path: "/", HttpOnly: true, Secure: h.cookieSecure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)

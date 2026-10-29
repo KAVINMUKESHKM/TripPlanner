@@ -1,4 +1,4 @@
-package providers
+package providers_test
 
 import (
 	"context"
@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"tripplanner/backend/internal/providers"
 )
 
 func TestRestaurantsFiltersAndSortsNearbyPlaces(t *testing.T) {
-	provider := Restaurants{APIKey: "test-key", Endpoint: "https://serp.test/search.json", Client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	provider := providers.Restaurants{APIKey: "test-key", Endpoint: "https://serp.test/search.json", Client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if got := r.URL.Query().Get("engine"); got != "google_maps" {
 			t.Errorf("engine = %q, want google_maps", got)
 		}
@@ -29,7 +31,7 @@ func TestRestaurantsFiltersAndSortsNearbyPlaces(t *testing.T) {
 		]}`)), Request: r}, nil
 	})}}
 
-	got, err := provider.Nearby(context.Background(), Coordinate{Latitude: 13, Longitude: 80})
+	got, err := provider.Nearby(context.Background(), providers.Coordinate{Latitude: 13, Longitude: 80})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +51,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) { return f(request) }
 
 func TestRestaurantsRequiresAPIKey(t *testing.T) {
-	_, err := (Restaurants{}).Nearby(context.Background(), Coordinate{Latitude: 13, Longitude: 80})
+	_, err := (providers.Restaurants{}).Nearby(context.Background(), providers.Coordinate{Latitude: 13, Longitude: 80})
 	if err == nil {
 		t.Fatal("Nearby() without a key succeeded")
 	}

@@ -31,11 +31,16 @@ Google sign-in is configured on the backend. The registered OAuth callback must 
 - `/` — destination, date, and duration search, with trip ideas.
 - `/plan` — attraction search, weather and category filtering, day selection, attraction details, nearby restaurants, editable itinerary, and map route summary.
 - `/login` and `/signup` — email/password and Google sign-in entry.
+- `/forgot-password` and `/reset-password` — email-based password recovery.
 - `/auth/callback` — completes Google sign-in.
 - `/trips` — list and delete saved trips.
 - `/trips/{id}` — edit a saved itinerary.
 
 Nearby restaurant lookup is optional. If the backend reports that it is not configured, add `SERP_API_KEY` (or keep the legacy `SERP_KEY`) to `backend/.env`. Restaurant map links open Google Maps; the itinerary map itself uses MapLibre with OpenFreeMap tiles and OSRM routing.
+
+Attraction details come from mapped OpenStreetMap tags. The place card shows available opening hours, address, wheelchair access, fees, toilets, internet access, contact details, and Wikipedia/Wikidata references. To refresh the Tamil Nadu dataset, follow the enrichment and import steps in [`backend/data/README.md`](../backend/data/README.md). Empty details mean OSM has no mapped value for that field.
+
+`src/proxy.ts` creates a per-request nonce Content Security Policy and narrow map host allowlist. If you set a custom map style, its host is allowed automatically; add any separate tile or glyph hosts used by that style to the CSP source lists in the proxy. The backend's trusted-proxy list should include only the actual proxy CIDRs.
 
 ## Build
 

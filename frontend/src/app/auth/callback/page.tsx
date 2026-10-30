@@ -16,9 +16,9 @@ function CallbackContent() {
     currentUser().then(() => { if (live) { router.replace("/trips"); router.refresh(); } }).catch(() => { if (live) setMessage("We couldn’t confirm your sign-in. Please try again."); });
     return () => { live = false; };
   }, [cancelled, router]);
-  return <section className="callback-card"><span className="eyebrow">Trip Planner</span><h1>{cancelled ? "No rush." : "One moment."}</h1><p role="status">{message}</p>{cancelled || message.startsWith("We couldn’t") ? <Link className="button" href="/login">Back to sign in</Link> : <span className="loading-dot" aria-hidden="true" />}</section>;
+  return <section id="main-content" className="callback-card" tabIndex={-1}><span className="eyebrow">Trip Planner</span><h1>{cancelled ? "No rush." : "One moment."}</h1><p role="status">{message}</p>{cancelled || message.startsWith("We couldn’t") ? <Link className="button" href="/login">Back to sign in</Link> : <span className="loading-dot" aria-hidden="true" />}</section>;
 }
 
 export default function AuthCallbackPage() {
-  return <main className="callback-shell"><Suspense fallback={<p>Finishing your sign-in…</p>}><CallbackContent /></Suspense></main>;
+  return <main className="callback-shell"><Suspense fallback={<p id="main-content" tabIndex={-1}>Finishing your sign-in…</p>}><CallbackContent /></Suspense></main>;
 }

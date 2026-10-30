@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -30,7 +31,12 @@ func (w Weather) Daily(ctx context.Context, point Coordinate, days int) ([]Forec
 	if client == nil {
 		client = &http.Client{Timeout: 8 * time.Second}
 	}
-	query := url.Values{"lat": {fmt.Sprint(point.Latitude)}, "lon": {fmt.Sprint(point.Longitude)}, "appid": {w.APIKey}, "units": {"metric"}}
+	query := url.Values{
+		"lat":   []string{fmt.Sprint(point.Latitude)},
+		"lon":   []string{fmt.Sprint(point.Longitude)},
+		"appid": []string{w.APIKey},
+		"units": []string{"metric"},
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.openweathermap.org/data/2.5/forecast?"+query.Encode(), nil)
 	if err != nil {
 		return nil, err
@@ -78,12 +84,10 @@ func (w Weather) Daily(ctx context.Context, point Coordinate, days int) ([]Forec
 	for _, forecast := range byDate {
 		forecasts = append(forecasts, forecast)
 	}
-	// Sort the provider's YYYY-MM-DD keys without requiring locale-aware date parsing.
-	for i := 1; i < len(forecasts); i++ {
-		for j := i; j > 0 && forecasts[j].Date < forecasts[j-1].Date; j-- {
-			forecasts[j], forecasts[j-1] = forecasts[j-1], forecasts[j]
-		}
-	}
+	// Sort the provider's YYYY-MM-DD keys lexicographically.
+	slices.SortFunc(forecasts, func(a, b Forecast) int {
+		return strings.Compare(a.Date, b.Date)
+	})
 	if len(forecasts) > days {
 		forecasts = forecasts[:days]
 	}

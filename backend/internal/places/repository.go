@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"tripplanner/backend/internal/providers"
 )
@@ -34,6 +35,13 @@ func (r *Repository) FindDestination(ctx context.Context, name string) (provider
 }
 
 func (r *Repository) Search(ctx context.Context, point providers.Coordinate, radiusKM float64, category string) ([]Attraction, error) {
+	latDelta := (radiusKM / 111.045) * 1.05
+	cosLat := math.Cos(point.Latitude * math.Pi / 180.0)
+	if cosLat < 0.01 {
+		cosLat = 0.01
+	}
+	lonDelta := (radiusKM / (111.045 * cosLat)) * 1.05
+
 	rows, err := r.pool.Query(ctx, `WITH candidates AS (
 		SELECT id,COALESCE(name,'') AS name,COALESCE(description,'') AS description,COALESCE(category,'') AS category,
 			latitude::double precision AS latitude,longitude::double precision AS longitude,COALESCE(source_url,'') AS source_url,
@@ -49,10 +57,12 @@ func (r *Repository) Search(ctx context.Context, point providers.Coordinate, rad
 			))) AS distance_km
 		FROM attractions
 		WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+			AND latitude BETWEEN ($2 - $5) AND ($2 + $5)
+			AND longitude BETWEEN ($1 - $6) AND ($1 + $6)
 			AND ($4='' OR lower(category)=lower($4))
 	)
 	SELECT id,name,description,category,latitude,longitude,source_url,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,details_updated_at,best_climate,ideal_weather,ideal_temp_min,ideal_temp_max FROM candidates
-	WHERE distance_km <= $3 ORDER BY distance_km,id LIMIT 200`, point.Longitude, point.Latitude, radiusKM, strings.TrimSpace(category))
+	WHERE distance_km <= $3 ORDER BY distance_km,id LIMIT 200`, point.Longitude, point.Latitude, radiusKM, strings.TrimSpace(category), latDelta, lonDelta)
 	if err != nil {
 		return nil, fmt.Errorf("search attractions: %w", err)
 	}
@@ -103,4 +113,36 @@ func (r *Repository) Get(ctx context.Context, id int64) (Attraction, error) {
 		place.DetailsUpdatedAt = &detailsUpdatedAt.Time
 	}
 	return place, nil
+}
+
+func (r *Repository) Nearby(ctx context.Context, point providers.Coordinate) ([]providers.Restaurant, error) {
+	rows, err := r.pool.Query(ctx, `WITH origin AS (
+		SELECT ST_SetSRID(ST_MakePoint($1,$2),4326)::geography AS location
+	)
+	SELECT restaurant.name,restaurant.amenity,COALESCE(restaurant.cuisine,''),COALESCE(restaurant.address,''),
+		COALESCE(restaurant.opening_hours,''),COALESCE(restaurant.phone,''),COALESCE(restaurant.website,''),
+		restaurant.source_url,ST_Y(restaurant.location::geometry),ST_X(restaurant.location::geometry),
+		ST_Distance(restaurant.location,origin.location)/1000.0
+	FROM restaurants restaurant CROSS JOIN origin
+	WHERE ST_DWithin(restaurant.location,origin.location,5000)
+	ORDER BY ST_Distance(restaurant.location,origin.location),restaurant.name
+	LIMIT 20`, point.Longitude, point.Latitude)
+	if err != nil {
+		return nil, fmt.Errorf("find nearby OSM restaurants: %w", err)
+	}
+	defer rows.Close()
+	results := make([]providers.Restaurant, 0)
+	for rows.Next() {
+		var restaurant providers.Restaurant
+		if err := rows.Scan(&restaurant.Name, &restaurant.Amenity, &restaurant.Cuisine, &restaurant.Address,
+			&restaurant.OpeningHours, &restaurant.Phone, &restaurant.Website, &restaurant.SourceURL,
+			&restaurant.Latitude, &restaurant.Longitude, &restaurant.DistanceKM); err != nil {
+			return nil, fmt.Errorf("read nearby OSM restaurant: %w", err)
+		}
+		results = append(results, restaurant)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read nearby OSM restaurants: %w", err)
+	}
+	return results, nil
 }

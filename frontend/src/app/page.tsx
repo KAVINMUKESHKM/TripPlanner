@@ -16,7 +16,7 @@ export default function HomePage() {
   return (
     <main className="home-shell">
       <SiteHeader />
-      <section className="hero">
+      <section id="main-content" className="hero" tabIndex={-1}>
         <div className="hero-copy">
           <p className="hero-kicker">A calmer way to plan</p>
           <h1>More journey.<br />Less juggling.</h1>

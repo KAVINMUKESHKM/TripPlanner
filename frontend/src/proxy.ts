@@ -17,7 +17,21 @@ export function proxy(request: NextRequest) {
     customStyleOrigin = "";
   }
   const mapSources = ["https://tiles.openfreemap.org", "https://fonts.openmaptiles.org", customStyleOrigin].filter(Boolean);
+  let apiOrigin = "";
+  try {
+    const apiURL = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (apiURL) {
+      const parsedAPIURL = new URL(apiURL);
+      const isLocalAPI = parsedAPIURL.hostname === "localhost" || parsedAPIURL.hostname === "127.0.0.1" || parsedAPIURL.hostname === "[::1]";
+      if (parsedAPIURL.protocol === "https:" || (isDev && isLocalAPI)) {
+        apiOrigin = parsedAPIURL.origin;
+      }
+    }
+  } catch {
+    apiOrigin = "";
+  }
   const connectSources = ["'self'", ...mapSources]
+    .concat(apiOrigin ? [apiOrigin] : [])
     .filter(Boolean)
     .join(" ");
   const imageSources = ["'self'", "data:", "blob:", ...mapSources].join(" ");

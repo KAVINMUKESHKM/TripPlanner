@@ -6,6 +6,8 @@ Each record retains its OpenStreetMap element URL. The data is available under t
 
 The enrichment command fetches OSM tags such as opening hours, address, wheelchair access, contact details, fees, toilets, internet access, Wikipedia, and Wikidata. For places linked to Wikidata it also fills a missing short English description and official website when available. Coverage is incomplete because details are only available when mapped by contributors. A missing field means the sources have no mapped value; it does not confirm that a venue lacks the facility. Re-run enrichment and import to refresh the details:
 
+The nearby food-place table is imported separately by `go run ./cmd/importosmrestaurants`. It queries named restaurants, cafes, fast food, food courts, ice cream shops, pubs, and bars inside Tamil Nadu and stores their OSM tags and point locations in the PostGIS `restaurants` table. The endpoint searches within 5 km of an attraction. Restaurant details are incomplete and OSM does not supply consistent ratings. This dataset is also ODbL; the application links each result to its OSM source and displays contributor attribution.
+
 From the `backend` directory, apply migrations and import or refresh the records with:
 
 ```sh

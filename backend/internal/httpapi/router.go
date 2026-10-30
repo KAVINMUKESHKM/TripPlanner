@@ -53,7 +53,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		}
 		health(w, r)
 	})
-	var handler http.Handler = withTimeout(securityHeaders(mux))
+	handler := withTimeout(securityHeaders(mux))
 	if deps.Limiter != nil {
 		handler = withTimeout(securityHeaders(rateLimitMiddleware(deps.Limiter, mux)))
 	}

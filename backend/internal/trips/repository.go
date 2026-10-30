@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -68,11 +68,21 @@ func (r *Repository) ListTrips(ctx context.Context, userID int64) ([]Trip, error
 		rows.Close()
 		return nil, fmt.Errorf("read trips: %w", err)
 	}
-	rows.Close()
-	for i := range trips {
-		trips[i].Days, err = loadDays(ctx, r.pool, trips[i].ID)
+	if len(trips) > 0 {
+		tripIDs := make([]int64, len(trips))
+		for i, t := range trips {
+			tripIDs[i] = t.ID
+		}
+		daysByTrip, err := loadDaysForTrips(ctx, r.pool, tripIDs)
 		if err != nil {
 			return nil, err
+		}
+		for i := range trips {
+			if days, ok := daysByTrip[trips[i].ID]; ok {
+				trips[i].Days = days
+			} else {
+				trips[i].Days = make([]Day, 0)
+			}
 		}
 	}
 	return trips, nil
@@ -174,15 +184,19 @@ func writeDays(ctx context.Context, tx pgx.Tx, tripID int64, input TripInput) er
 	for _, day := range input.Days {
 		dayStops[day.DayNumber] = day.AttractionIDs
 	}
+	batch := &pgx.Batch{}
 	for dayNumber := 1; dayNumber <= input.DayCount; dayNumber++ {
-		if _, err := tx.Exec(ctx, "INSERT INTO trip_days (trip_id, day_number) VALUES ($1, $2)", tripID, dayNumber); err != nil {
-			return fmt.Errorf("insert trip day %d: %w", dayNumber, err)
-		}
+		batch.Queue("INSERT INTO trip_days (trip_id, day_number) VALUES ($1, $2)", tripID, dayNumber)
 		for position, attractionID := range dayStops[dayNumber] {
-			if _, err := tx.Exec(ctx, `INSERT INTO trip_stops (trip_id, day_number, stop_position, attraction_id)
-				VALUES ($1, $2, $3, $4)`, tripID, dayNumber, position, attractionID); err != nil {
-				return fmt.Errorf("insert attraction %d on day %d: %w", attractionID, dayNumber, err)
-			}
+			batch.Queue(`INSERT INTO trip_stops (trip_id, day_number, stop_position, attraction_id)
+				VALUES ($1, $2, $3, $4)`, tripID, dayNumber, position, attractionID)
+		}
+	}
+	results := tx.SendBatch(ctx, batch)
+	defer results.Close()
+	for i := 0; i < batch.Len(); i++ {
+		if _, err := results.Exec(); err != nil {
+			return fmt.Errorf("write trip days batch item %d: %w", i, err)
 		}
 	}
 	return nil
@@ -219,33 +233,49 @@ func scanTrip(row pgx.Row) (Trip, error) {
 }
 
 func loadDays(ctx context.Context, q queryer, tripID int64) ([]Day, error) {
-	rows, err := q.Query(ctx, `SELECT day_number, stop_position, attraction_id
-		FROM trip_days d LEFT JOIN trip_stops s USING (trip_id, day_number)
-		WHERE d.trip_id = $1 ORDER BY d.day_number, s.stop_position`, tripID)
+	res, err := loadDaysForTrips(ctx, q, []int64{tripID})
 	if err != nil {
-		return nil, fmt.Errorf("load trip days: %w", err)
+		return nil, err
 	}
-	days := make([]Day, 0)
+	if days, ok := res[tripID]; ok {
+		return days, nil
+	}
+	return make([]Day, 0), nil
+}
+
+func loadDaysForTrips(ctx context.Context, q queryer, tripIDs []int64) (map[int64][]Day, error) {
+	if len(tripIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := q.Query(ctx, `SELECT d.trip_id, d.day_number, s.stop_position, s.attraction_id
+		FROM trip_days d LEFT JOIN trip_stops s USING (trip_id, day_number)
+		WHERE d.trip_id = ANY($1) ORDER BY d.trip_id, d.day_number, s.stop_position`, tripIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load trip days batch: %w", err)
+	}
+	defer rows.Close()
+
+	res := make(map[int64][]Day, len(tripIDs))
 	for rows.Next() {
+		var tripID int64
 		var dayNumber int16
 		var position, attractionID pgtype.Int8
-		if err := rows.Scan(&dayNumber, &position, &attractionID); err != nil {
-			rows.Close()
+		if err := rows.Scan(&tripID, &dayNumber, &position, &attractionID); err != nil {
 			return nil, fmt.Errorf("scan trip day: %w", err)
 		}
+		days := res[tripID]
 		if len(days) == 0 || days[len(days)-1].DayNumber != int(dayNumber) {
 			days = append(days, Day{DayNumber: int(dayNumber), Stops: make([]Stop, 0)})
 		}
 		if attractionID.Valid {
 			days[len(days)-1].Stops = append(days[len(days)-1].Stops, Stop{Position: int(position.Int64), AttractionID: attractionID.Int64})
 		}
+		res[tripID] = days
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
-		return nil, fmt.Errorf("read trip days: %w", err)
+		return nil, fmt.Errorf("read trip days batch: %w", err)
 	}
-	rows.Close()
-	return days, nil
+	return res, nil
 }
 
 var _ queryer = (*pgxpool.Pool)(nil)

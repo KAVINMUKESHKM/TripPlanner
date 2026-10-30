@@ -325,8 +325,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-        '502':
-          description: Restaurant provider request failed
+        '500':
+          description: Nearby restaurant database query failed
           content:
             application/json:
               schema:
@@ -629,17 +629,26 @@ components:
             $ref: '#/components/schemas/Attraction'
     Restaurant:
       type: object
-      required: [name, rating, latitude, longitude, distanceKm]
+      required: [name, amenity, sourceUrl, latitude, longitude, distanceKm]
       properties:
         name:
           type: string
+        amenity:
+          type: string
+        cuisine:
+          type: string
         address:
           type: string
-        rating:
-          type: number
-          format: double
+        openingHours:
+          type: string
         phone:
           type: string
+        website:
+          type: string
+          format: uri
+        sourceUrl:
+          type: string
+          format: uri
         latitude:
           type: number
           format: double

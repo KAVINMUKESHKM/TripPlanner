@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	pgx "github.com/jackc/pgx/v5"
 )
 
 const passwordResetLifetime = 30 * time.Minute

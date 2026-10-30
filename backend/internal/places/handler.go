@@ -58,12 +58,8 @@ func (h *Handler) restaurants(w http.ResponseWriter, r *http.Request) {
 	}
 	results, err := h.Restaurants.Nearby(r.Context(), providers.Coordinate{Latitude: place.Latitude, Longitude: place.Longitude})
 	if err != nil {
-		log.Printf("places restaurants: provider request failed: %v", err)
-		status := 502
-		if strings.Contains(err.Error(), "not configured") {
-			status = 503
-		}
-		writeError(w, status, err.Error())
+		log.Printf("places restaurants: database query failed: %v", err)
+		writeError(w, 503, "nearby restaurant data is unavailable")
 		return
 	}
 	writeJSON(w, 200, results)

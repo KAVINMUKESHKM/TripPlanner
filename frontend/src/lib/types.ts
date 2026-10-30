@@ -35,9 +35,13 @@ export type Attraction = {
 
 export type NearbyRestaurant = {
   name: string;
+  amenity: string;
+  cuisine?: string;
   address?: string;
-  rating: number;
+  openingHours?: string;
   phone?: string;
+  website?: string;
+  sourceUrl: string;
   latitude: number;
   longitude: number;
   distanceKm: number;

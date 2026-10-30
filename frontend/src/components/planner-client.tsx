@@ -21,6 +21,11 @@ const MapView = dynamic(() => import("@/components/maplibre-map"), { ssr: false,
 const PENDING_DRAFT = "tripplanner:pending-trip:v1";
 const today = () => { const date = new Date(); date.setMinutes(date.getMinutes() - date.getTimezoneOffset()); return date.toISOString().slice(0, 10); };
 const blankDays = (count: number) => Array.from({ length: count }, () => [] as number[]);
+const isValidDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+};
 
 type Draft = { destination: string; startDate: string; dayCount: number; selected: number[][]; places: Attraction[] };
 
@@ -28,13 +33,15 @@ export function PlannerClient({ tripId }: { tripId?: string }) {
   const params = useSearchParams();
   const router = useRouter();
   const searchKey = params.toString();
+  const requestedDays = Number(params.get("days") || 3);
+  const initialDayCount = Number.isFinite(requestedDays) ? Math.min(14, Math.max(1, requestedDays)) : 3;
   const [destination, setDestination] = useState(() => params.get("destination") ?? "");
   const [startDate, setStartDate] = useState(() => params.get("date") || today());
-  const [dayCount, setDayCount] = useState(() => Math.min(14, Math.max(1, Number(params.get("days") || 3))));
+  const [dayCount, setDayCount] = useState(initialDayCount);
   const [category, setCategory] = useState("");
   const [activeDay, setActiveDay] = useState(1);
   const [suggestions, setSuggestions] = useState<SearchDay[]>([]);
-  const [selected, setSelected] = useState<number[][]>(() => blankDays(Math.min(14, Math.max(1, Number(params.get("days") || 3)))));
+  const [selected, setSelected] = useState<number[][]>(() => blankDays(initialDayCount));
   const [places, setPlaces] = useState<Attraction[]>([]);
   const [focusPlace, setFocusPlace] = useState<Attraction | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -81,8 +88,13 @@ export function PlannerClient({ tripId }: { tripId?: string }) {
       setLoading(true);
       getTrip(tripId).then(async (trip) => {
         const ids = trip.days.flatMap((day) => day.stops.map((stop) => stop.attractionId));
-        const loaded = await Promise.all(ids.map((id) => getAttraction(id).catch(() => null)));
-        if (!live) return;
+        const loaded: (Attraction | null)[] = [];
+        const batchSize = 6;
+        for (let start = 0; start < ids.length; start += batchSize) {
+          const batch = await Promise.all(ids.slice(start, start + batchSize).map((id) => getAttraction(id).catch(() => null)));
+          loaded.push(...batch);
+          if (!live) return;
+        }
         const found = loaded.map((place, index): Attraction => place ?? { id: ids[index], name: `Saved stop ${ids[index]}`, latitude: 0, longitude: 0 });
         setPlaces(found);
         const firstDayStop = trip.days.find((day) => day.dayNumber === 1)?.stops[0];
@@ -174,6 +186,7 @@ export function PlannerClient({ tripId }: { tripId?: string }) {
   async function saveTrip() {
     setSaveError("");
     if (!destination.trim()) { setSaveError("Add a destination before saving this trip."); return; }
+    if (!isValidDate(startDate)) { setSaveError("Choose a valid first day before saving this trip."); return; }
     if (!user) {
       try { window.sessionStorage.setItem(PENDING_DRAFT, JSON.stringify({ destination, startDate, dayCount, selected, places } satisfies Draft)); } catch { /* The current plan remains editable in this tab. */ }
       const next = tripId ? `/trips/${tripId}` : `/plan?${new URLSearchParams({ destination, date: startDate, days: String(dayCount) })}`;
@@ -209,7 +222,7 @@ export function PlannerClient({ tripId }: { tripId?: string }) {
 
   return <main className="planner-shell">
     <SiteHeader />
-    <section className="planner-heading"><div><Link className="back-link" href={tripId ? "/trips" : "/"}>← {tripId ? "Saved trips" : "Home"}</Link><span className="eyebrow">A trip takes shape one stop at a time</span><h1>{tripId ? "Edit your itinerary." : "Make a day of it."}</h1><p>Gather a few places, give them an order, and leave some space between.</p></div>
+    <section id="main-content" className="planner-heading" tabIndex={-1}><div><Link className="back-link" href={tripId ? "/trips" : "/"}>← {tripId ? "Saved trips" : "Home"}</Link><span className="eyebrow">A trip takes shape one stop at a time</span><h1>{tripId ? "Edit your itinerary." : "Make a day of it."}</h1><p>Gather a few places, give them an order, and leave some space between.</p></div>
       <Button className="save-button" variant="contained" onClick={saveTrip} disabled={saving}>{saving ? "Saving…" : tripId ? "Save changes" : user ? "Save this trip" : "Sign in to save"}</Button>
     </section>
 

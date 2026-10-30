@@ -5,6 +5,7 @@
   --primary-dark: #0a0908;
   --primary-soft: rgba(198,172,143,.24);
   --accent: #c6ac8f;
+  --focus: #005fcc;
   --text: #0a0908;
   --muted: #5e503f;
   --line: rgba(94,80,63,.25);
@@ -18,7 +19,9 @@ body { margin: 0; background: var(--page); color: var(--text); font-family: var(
 button, input, select { font: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
-:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.skip-link { position: fixed; z-index: 2000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: 8px; background: var(--primary); color: #fff; font-weight: 600; }
+.skip-link:focus-visible { transform: translateY(0); }
 ::selection { background: var(--primary-soft); color: var(--primary); }
 
 .home-shell, .planner-shell, .trips-shell, .auth-shell { width: min(100%, 1440px); min-height: 100vh; margin: 0 auto; padding: 0 40px 56px; }
@@ -32,6 +35,7 @@ a { color: inherit; text-decoration: none; }
 .account-name { max-width: 180px; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .header-account .MuiButton-root { min-width: 0; }
 .button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0 16px; border: 1px solid var(--primary); border-radius: 9px; background: var(--primary); color: #fff; font-weight: 600; transition: background-color .18s ease, transform .18s ease; }
+.MuiButton-root.MuiButton-contained.MuiButton-colorPrimary:not(.Mui-disabled) { color: var(--surface); }
 .button:hover { background: var(--primary-dark); }
 .text-button { padding: 7px 9px; border: 0; background: transparent; color: var(--primary); cursor: pointer; }
 .eyebrow { display: block; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .015em; }
@@ -231,8 +235,8 @@ a { color: inherit; text-decoration: none; }
   .hero-visual { min-height: 245px; }
   .section-intro { align-items: flex-start; }
   .planner-grid { grid-template-columns: 1fr; }
-  .planner-side { order: 0; }
-  .planner-main { order: 1; }
+  .planner-main { order: 0; }
+  .planner-side { order: 1; }
   .map-frame { height: 260px; }
 }
 @media (max-width: 600px) {
@@ -274,6 +278,9 @@ a { color: inherit; text-decoration: none; }
   .restaurant-rating { font-size: 11px; }
   .stop-row { grid-template-columns: 18px minmax(0,1fr) auto; gap: 4px; }
   .stop-actions select { max-width: 54px; }
+  .icon-button { width: 40px; height: 40px; }
+  .stop-actions select { min-height: 40px; }
+  .add-place.MuiButton-root { min-height: 40px; }
   .trip-card { padding-left: 13px; }
   .trips-empty { padding: 44px 16px; }
 }
@@ -284,6 +291,29 @@ a { color: inherit; text-decoration: none; }
   .main-nav a { padding-right: 7px; padding-left: 7px; }
   .places-panel, .itinerary-panel { padding: 11px; }
   .restaurant-result { grid-template-columns: 1fr; }
+}
+@media (min-width: 1441px) {
+  .home-shell, .planner-shell, .trips-shell, .auth-shell { width: min(100%, 1600px); }
+}
+@media (max-width: 420px) {
+  .home-shell, .planner-shell, .trips-shell, .auth-shell { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+  .site-header { column-gap: 4px; }
+  .header-account { gap: 2px; }
+  .header-account .MuiButton-root { padding-right: 6px; padding-left: 6px; font-size: 11px; }
+  .hero { padding: 20px; }
+  .planner-search { grid-template-columns: minmax(0,1fr); }
+  .planner-search > .search-field:first-child, .planner-search > .MuiButton-root { grid-column: 1; }
+  .search-rail { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+  .place-card { grid-template-columns: minmax(0,1fr) auto; }
+  .places-panel, .itinerary-panel { padding: 12px; }
+}
+@media (max-width: 340px) {
+  .site-header { grid-template-columns: 1fr; grid-template-rows: auto auto auto; }
+  .site-header > .brand, .site-header > .main-nav, .site-header > .header-account { grid-column: 1; }
+  .site-header > .main-nav { grid-row: 2; justify-content: flex-start; }
+  .site-header > .header-account { grid-row: 3; justify-content: flex-start; }
+  .ideas-heading { align-items: flex-start; gap: 8px; }
+  .restaurant-panel { padding: 9px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }

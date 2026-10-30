@@ -93,7 +93,7 @@ func TestGoogleOAuthRejectsUnverifiedEmail(t *testing.T) {
 	if err := db.Apply(context.Background(), database.Pool, "../../../migrations"); err != nil {
 		t.Fatal(err)
 	}
-	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "test-access", "token_type": "Bearer", "id_token": "signed-test-token"})
 	}))

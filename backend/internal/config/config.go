@@ -13,7 +13,6 @@ type Config struct {
 	MigratorDatabaseURL string
 	ImporterDatabaseURL string
 	OpenWeatherAPIKey   string
-	SerpAPIKey          string
 	OpenCageAPIKey      string
 	OSRMBaseURL         string
 	CookieSecure        bool
@@ -33,7 +32,7 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"), MigratorDatabaseURL: os.Getenv("MIGRATOR_DATABASE_URL"), ImporterDatabaseURL: os.Getenv("IMPORTER_DATABASE_URL"), OpenWeatherAPIKey: firstSet("OPENWEATHER_API_KEY", "OPEN_WEATHER_KEY"), SerpAPIKey: firstSet("SERP_API_KEY", "SERP_KEY"),
+		DatabaseURL: os.Getenv("DATABASE_URL"), MigratorDatabaseURL: os.Getenv("MIGRATOR_DATABASE_URL"), ImporterDatabaseURL: os.Getenv("IMPORTER_DATABASE_URL"), OpenWeatherAPIKey: firstSet("OPENWEATHER_API_KEY", "OPEN_WEATHER_KEY"),
 		OpenCageAPIKey: os.Getenv("OPENCAGE_API_KEY"), OSRMBaseURL: os.Getenv("OSRM_BASE_URL"),
 		CookieSecure:   os.Getenv("COOKIE_SECURE") == "true",
 		Environment:    os.Getenv("APP_ENV"),

@@ -114,7 +114,7 @@ func run(ctx context.Context, args []string) error {
 	client := &http.Client{Timeout: 2 * time.Minute}
 	requestCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, strings.NewReader(url.Values{"data": {query}}.Encode()))
+	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, strings.NewReader(url.Values{"data": []string{query}}.Encode()))
 	if err != nil {
 		return fmt.Errorf("create Overpass request: %w", err)
 	}
@@ -264,11 +264,11 @@ func fetchWikidataDetails(ctx context.Context, client *http.Client, places []att
 	for start := 0; start < len(ids); start += 50 {
 		end := min(start+50, len(ids))
 		query := url.Values{
-			"action":    {"wbgetentities"},
-			"ids":       {strings.Join(ids[start:end], "|")},
-			"props":     {"descriptions|claims"},
-			"languages": {"en"},
-			"format":    {"json"},
+			"action":    []string{"wbgetentities"},
+			"ids":       []string{strings.Join(ids[start:end], "|")},
+			"props":     []string{"descriptions|claims"},
+			"languages": []string{"en"},
+			"format":    []string{"json"},
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://www.wikidata.org/w/api.php?"+query.Encode(), nil)
 		if err != nil {

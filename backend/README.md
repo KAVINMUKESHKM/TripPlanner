@@ -5,7 +5,7 @@ The Go API serves authentication, attraction search, nearby restaurant results, 
 ## Requirements
 
 - Go 1.27.3 (see `go.mod`)
-- PostgreSQL
+- PostgreSQL with the PostGIS extension available to the migration role
 - Optional provider API keys listed below
 
 ## Configure
@@ -16,12 +16,11 @@ Copy `.env.example` to `.env` only if `.env` does not already exist. Set `DATABA
 | --- | --- | --- |
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `MIGRATOR_DATABASE_URL` | No | Separate schema-owner connection used only by the migration command; defaults to `DATABASE_URL` |
-| `IMPORTER_DATABASE_URL` | No | Optional data-loader connection used only by `cmd/importosm`; defaults to `DATABASE_URL` |
+| `IMPORTER_DATABASE_URL` | No | Optional data-loader connection used by OSM import commands; defaults to `DATABASE_URL` |
 | `PORT` | No | API port; defaults to `8080` |
 | `FRONTEND_URL` | Recommended | Allowed browser origin and OAuth return target; defaults to local frontend when configured |
 | `OPENCAGE_API_KEY` | No | Geocode destination names missing from `destinations` |
 | `OPENWEATHER_API_KEY` (`OPEN_WEATHER_KEY` also accepted) | No | Add daily weather summaries and match saved ideal-weather preferences |
-| `SERP_API_KEY` (`SERP_KEY` also accepted) | No | Find nearby restaurants from attraction cards |
 | `GOOGLE_CLIENT_ID` | No | Enables Google OAuth when paired with the secret |
 | `GOOGLE_CLIENT_SECRET` | No | Enables Google OAuth when paired with the client ID |
 | `GOOGLE_REDIRECT_URL` | No | OAuth callback; defaults to `${FRONTEND_URL}/api/v1/auth/google/callback` |
@@ -42,10 +41,11 @@ go run ./cmd/enrichosm                 # fetch current visitor details from OSM/
 go run ./cmd/enrichosm --wikidata-only # refresh descriptions and websites without Overpass
 go run ./cmd/importosm                 # optional: import bundled Tamil Nadu data
 go run ./cmd/importosm data/places.json # optional: import another compatible dataset
+go run ./cmd/importosmrestaurants     # fetch and import Tamil Nadu food places into PostGIS
 go run ./cmd/api
 ```
 
-The migration command applies unapplied SQL migrations in filename order. The API does not run migrations automatically. `enrichosm` fetches one batch of current OpenStreetMap tags for the bundled records and updates the JSON dataset; `importosm` then upserts those details into PostgreSQL. Both commands can be rerun. Detail coverage depends on what OpenStreetMap contributors have mapped; empty fields mean no value was available, not that a venue has no hours or accessibility features.
+The migration command applies unapplied SQL migrations in filename order, including the PostGIS extension and indexed restaurant table. The PostgreSQL server must include PostGIS, and the migration role must be allowed to enable it. The API does not run migrations automatically. `enrichosm` fetches one batch of current OpenStreetMap tags for the bundled attraction records and updates the JSON dataset; `importosm` then upserts those details into PostgreSQL. `importosmrestaurants` fetches named restaurants, cafes, fast food, food courts, ice cream shops, pubs, and bars within Tamil Nadu from Overpass and upserts their tags and coordinates into PostGIS. Both import commands can be rerun. Restaurant lookup uses the PostGIS geography index and returns the nearest 20 mapped food places within 5 km. OSM does not provide consistent ratings or complete business details; missing fields mean no value was mapped.
 
 At startup the API logs database readiness, its listen address, and (when OAuth is enabled) the exact Google callback URI. Each request is logged with its method, path, status, and duration; query strings and credentials are omitted. Check the callback log against the authorized redirect URI in Google Cloud if Google reports `redirect_uri_mismatch`.
 
@@ -68,7 +68,7 @@ All routes use the `/api/v1` prefix.
 | `GET` | `/auth/google/callback` | Complete Google OAuth |
 | `GET` | `/attractions?destination=…&days=…&date=YYYY-MM-DD&category=…` | Search and group attractions by itinerary day |
 | `GET` | `/attractions/{id}` | Get one attraction |
-| `GET` | `/attractions/{id}/restaurants` | Get nearby restaurants (SerpAPI key required) |
+| `GET` | `/attractions/{id}/restaurants` | Get nearby OpenStreetMap food places from PostGIS |
 | `POST` | `/routes` | Get an OSRM route for ordered waypoints |
 | `GET`, `POST` | `/trips` | List or create the signed-in user's trips |
 | `GET`, `PUT`, `DELETE` | `/trips/{id}` | Read, update, or delete an owned trip |
@@ -86,13 +86,15 @@ GRANT SELECT, INSERT, UPDATE ON users TO tripplanner_app;
 GRANT SELECT, INSERT, DELETE ON sessions, oauth_states TO tripplanner_app;
 GRANT SELECT, INSERT, DELETE ON password_reset_tokens TO tripplanner_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON api_rate_limits TO tripplanner_app;
-GRANT SELECT ON destinations, attractions TO tripplanner_app;
+GRANT SELECT ON destinations, attractions, restaurants TO tripplanner_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON trips, trip_days, trip_stops TO tripplanner_app;
 GRANT USAGE, SELECT ON SEQUENCE users_id_seq, trips_id_seq TO tripplanner_app;
 
 GRANT CONNECT ON DATABASE tripplanner TO tripplanner_importer;
 GRANT USAGE ON SCHEMA public TO tripplanner_importer;
 GRANT SELECT, INSERT, UPDATE ON attractions TO tripplanner_importer;
+GRANT SELECT, INSERT, UPDATE ON restaurants TO tripplanner_importer;
+GRANT USAGE, SELECT ON SEQUENCE restaurants_id_seq TO tripplanner_importer;
 GRANT USAGE, SELECT ON SEQUENCE attractions_id_seq TO tripplanner_importer;
 ```
 

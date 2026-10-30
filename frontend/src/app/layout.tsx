@@ -7,5 +7,5 @@ import "./globals.css";
 export const metadata: Metadata = { title: { default: "Trip Planner — Make a trip of your own", template: "%s · Trip Planner" }, description: "Find places worth stopping for, shape your days, and keep your itinerary close." };
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return <html lang="en"><body><AppRouterCacheProvider options={{ enableCssLayer: true, nonce }}><AppProviders>{children}</AppProviders></AppRouterCacheProvider></body></html>;
+  return <html lang="en"><body><a className="skip-link" href="#main-content">Skip to content</a><AppRouterCacheProvider options={{ enableCssLayer: true, nonce }}><AppProviders>{children}</AppProviders></AppRouterCacheProvider></body></html>;
 }

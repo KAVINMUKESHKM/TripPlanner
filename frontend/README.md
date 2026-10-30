@@ -36,7 +36,7 @@ Google sign-in is configured on the backend. The registered OAuth callback must 
 - `/trips` — list and delete saved trips.
 - `/trips/{id}` — edit a saved itinerary.
 
-Nearby restaurant lookup is optional. If the backend reports that it is not configured, add `SERP_API_KEY` (or keep the legacy `SERP_KEY`) to `backend/.env`. Restaurant map links open Google Maps; the itinerary map itself uses MapLibre with OpenFreeMap tiles and OSRM routing.
+Nearby restaurant results come from OpenStreetMap records imported into the backend PostGIS database. Apply migrations and run `go run ./cmd/importosmrestaurants` from `backend/` to load or refresh them. Restaurant map links open Google Maps; the itinerary map itself uses MapLibre with OpenFreeMap tiles and OSRM routing.
 
 Attraction details come from mapped OpenStreetMap tags. The place card shows available opening hours, address, wheelchair access, fees, toilets, internet access, contact details, and Wikipedia/Wikidata references. To refresh the Tamil Nadu dataset, follow the enrichment and import steps in [`backend/data/README.md`](../backend/data/README.md). Empty details mean OSM has no mapped value for that field.
 

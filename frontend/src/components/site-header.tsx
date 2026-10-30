@@ -13,7 +13,12 @@ export function SiteHeader() {
 
   async function signOut() {
     setBusy(true);
-    try { await logout(); } finally { setUser(null); setBusy(false); }
+    try {
+      await logout();
+      setUser(null);
+    } catch {
+      window.alert("Could not sign out. Please try again.");
+    } finally { setBusy(false); }
   }
 
   async function signOutEverywhere() {

@@ -39,6 +39,7 @@ type attraction struct {
 	InternetAccess    string     `json:"internet_access,omitempty"`
 	Wikipedia         string     `json:"wikipedia,omitempty"`
 	Wikidata          string     `json:"wikidata,omitempty"`
+	WikipediaImageURL string     `json:"wikipedia_image_url,omitempty"`
 	DetailsUpdatedAt  *time.Time `json:"details_updated_at,omitempty"`
 }
 
@@ -79,11 +80,15 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	wikidataOnly := len(args) > 0 && args[0] == "--wikidata-only"
+	wikipediaOnly := len(args) > 0 && args[0] == "--wikipedia-only"
 	if wikidataOnly {
 		args = args[1:]
 	}
+	if wikipediaOnly {
+		args = args[1:]
+	}
 	if len(args) > 1 {
-		return errors.New("usage: go run ./cmd/enrichosm [--wikidata-only] [data-file]")
+		return errors.New("usage: go run ./cmd/enrichosm [--wikidata-only|--wikipedia-only] [data-file]")
 	}
 	path := defaultDataset
 	if len(args) == 1 {
@@ -102,6 +107,9 @@ func run(ctx context.Context, args []string) error {
 	}
 	if wikidataOnly {
 		return enrichWikidataOnly(ctx, path, places)
+	}
+	if wikipediaOnly {
+		return enrichWikipediaOnly(ctx, path, places)
 	}
 	query, _, err := overpassQuery(places)
 	if err != nil {
@@ -184,6 +192,11 @@ func run(ctx context.Context, args []string) error {
 			places[i].Website = details.Website
 		}
 	}
+	wikipediaDetails, err := fetchWikipediaDetails(requestCtx, client, places, "")
+	if err != nil {
+		log.Printf("Wikipedia enrichment unavailable; keeping existing place details: %v", err)
+	}
+	applyWikipediaDetails(places, wikipediaDetails)
 	if err := writeDataset(path, places); err != nil {
 		return err
 	}
@@ -193,8 +206,130 @@ func run(ctx context.Context, args []string) error {
 			withDescription++
 		}
 	}
-	fmt.Printf("Updated %d OSM place records; added Wikidata details where linked (%d of %d now have descriptions; Overpass timestamp %s).\n", enriched, withDescription, len(places), updatedAt.Format(time.RFC3339))
+	fmt.Printf("Updated %d OSM place records and cached Wikipedia summaries where linked (%d of %d now have descriptions; Overpass timestamp %s).\n", enriched, withDescription, len(places), updatedAt.Format(time.RFC3339))
 	return nil
+}
+
+func enrichWikipediaOnly(ctx context.Context, path string, places []attraction) error {
+	requestCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	details, err := fetchWikipediaDetails(requestCtx, &http.Client{Timeout: 15 * time.Second}, places, "")
+	if err != nil {
+		return err
+	}
+	applyWikipediaDetails(places, details)
+	if err := writeDataset(path, places); err != nil {
+		return err
+	}
+	withDescription, withImage := 0, 0
+	for _, place := range places {
+		if place.Description != "" {
+			withDescription++
+		}
+		if place.WikipediaImageURL != "" {
+			withImage++
+		}
+	}
+	fmt.Printf("Cached Wikipedia details (%d places have descriptions; %d have images).\n", withDescription, withImage)
+	return nil
+}
+
+func applyWikipediaDetails(places []attraction, details map[string]wikipediaDetails) {
+	for i := range places {
+		item, ok := details[places[i].Wikipedia]
+		if !ok {
+			continue
+		}
+		language, _, validTag := parseWikipediaTag(places[i].Wikipedia)
+		if validTag && language == "en" && strings.TrimSpace(places[i].Description) == "" {
+			places[i].Description = item.Description
+		}
+		if places[i].WikipediaImageURL == "" {
+			places[i].WikipediaImageURL = item.ImageURL
+		}
+	}
+}
+
+type wikipediaDetails struct {
+	Description string `json:"extract"`
+	ImageURL    string `json:"-"`
+}
+
+func parseWikipediaTag(value string) (language, title string, ok bool) {
+	language, title, found := strings.Cut(strings.TrimSpace(value), ":")
+	if !found || len(language) < 2 || len(language) > 12 || strings.TrimSpace(title) == "" {
+		return "", "", false
+	}
+	for _, char := range language {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '-' {
+			return "", "", false
+		}
+	}
+	return strings.ToLower(language), strings.TrimSpace(title), true
+}
+
+func fetchWikipediaDetails(ctx context.Context, client *http.Client, places []attraction, baseURL string) (map[string]wikipediaDetails, error) {
+	unique := make(map[string]struct{})
+	for _, place := range places {
+		if _, _, ok := parseWikipediaTag(place.Wikipedia); ok {
+			unique[place.Wikipedia] = struct{}{}
+		}
+	}
+	keys := make([]string, 0, len(unique))
+	for key := range unique {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	results := make(map[string]wikipediaDetails, len(keys))
+	for i, key := range keys {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return results, ctx.Err()
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+		language, title, _ := parseWikipediaTag(key)
+		endpoint := "https://" + language + ".wikipedia.org/api/rest_v1/page/summary/" + url.PathEscape(strings.ReplaceAll(title, " ", "_"))
+		if baseURL != "" {
+			endpoint = strings.TrimRight(baseURL, "/") + "/api/rest_v1/page/summary/" + url.PathEscape(strings.ReplaceAll(title, " ", "_"))
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create Wikipedia request: %w", err)
+		}
+		req.Header.Set("User-Agent", "TripPlanner/1.0 (https://github.com/KAVINMUKESHKM/TripPlanner)")
+		response, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("request Wikipedia summary for %q: %w", key, err)
+		}
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, 2<<20))
+		_ = response.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read Wikipedia summary for %q: %w", key, readErr)
+		}
+		if response.StatusCode == http.StatusNotFound {
+			continue
+		}
+		if response.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("Wikipedia returned HTTP %d for %q", response.StatusCode, key)
+		}
+		var payload struct {
+			Extract   string `json:"extract"`
+			Thumbnail struct {
+				Source string `json:"source"`
+			} `json:"thumbnail"`
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
+			return nil, fmt.Errorf("decode Wikipedia summary for %q: %w", key, err)
+		}
+		imageURL := ""
+		if parsed, err := url.Parse(payload.Thumbnail.Source); err == nil && parsed.Scheme == "https" && parsed.Host == "upload.wikimedia.org" {
+			imageURL = parsed.String()
+		}
+		results[key] = wikipediaDetails{Description: strings.TrimSpace(payload.Extract), ImageURL: imageURL}
+	}
+	return results, nil
 }
 
 func enrichWikidataOnly(ctx context.Context, path string, places []attraction) error {

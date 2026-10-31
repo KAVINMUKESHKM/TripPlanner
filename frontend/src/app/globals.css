@@ -20,6 +20,7 @@ button, input, select { font: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.MuiInputBase-input:focus-visible { outline: none; }
 .skip-link { position: fixed; z-index: 2000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: 8px; background: var(--primary); color: #fff; font-weight: 600; }
 .skip-link:focus-visible { transform: translateY(0); }
 ::selection { background: var(--primary-soft); color: var(--primary); }

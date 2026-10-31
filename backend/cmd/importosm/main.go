@@ -32,6 +32,7 @@ type attraction struct {
 	InternetAccess    string     `json:"internet_access"`
 	Wikipedia         string     `json:"wikipedia"`
 	Wikidata          string     `json:"wikidata"`
+	WikipediaImageURL string     `json:"wikipedia_image_url"`
 	DetailsUpdatedAt  *time.Time `json:"details_updated_at"`
 }
 
@@ -99,13 +100,13 @@ func run(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = tx.Rollback(context.Background()) }()
 	command, err := tx.Exec(ctx, `INSERT INTO attractions
-		(source,source_id,source_url,name,description,category,latitude,longitude,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,details_updated_at)
-		SELECT 'OpenStreetMap',source_id,source_url,name,description,category,latitude,longitude,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,details_updated_at
+		(source,source_id,source_url,name,description,category,latitude,longitude,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,wikipedia_image_url,details_updated_at)
+		SELECT 'OpenStreetMap',source_id,source_url,name,description,category,latitude,longitude,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,wikipedia_image_url,details_updated_at
 		FROM jsonb_to_recordset($1::jsonb) AS rows(
 			source_id TEXT,source_url TEXT,name TEXT,description TEXT,category TEXT,
 			latitude DOUBLE PRECISION,longitude DOUBLE PRECISION,address TEXT,opening_hours TEXT,wheelchair TEXT,
 			website TEXT,phone TEXT,fee TEXT,toilets TEXT,toilets_wheelchair TEXT,internet_access TEXT,
-			wikipedia TEXT,wikidata TEXT,details_updated_at TIMESTAMPTZ
+			wikipedia TEXT,wikidata TEXT,wikipedia_image_url TEXT,details_updated_at TIMESTAMPTZ
 		)
 		ON CONFLICT (source,source_id) WHERE source IS NOT NULL AND source_id IS NOT NULL
 		DO UPDATE SET source_url=EXCLUDED.source_url,name=EXCLUDED.name,description=EXCLUDED.description,
@@ -121,6 +122,7 @@ func run(ctx context.Context, args []string) error {
 			internet_access=CASE WHEN EXCLUDED.details_updated_at IS NOT NULL THEN NULLIF(EXCLUDED.internet_access,'') ELSE attractions.internet_access END,
 			wikipedia=CASE WHEN EXCLUDED.details_updated_at IS NOT NULL THEN NULLIF(EXCLUDED.wikipedia,'') ELSE attractions.wikipedia END,
 			wikidata=CASE WHEN EXCLUDED.details_updated_at IS NOT NULL THEN NULLIF(EXCLUDED.wikidata,'') ELSE attractions.wikidata END,
+			wikipedia_image_url=COALESCE(NULLIF(EXCLUDED.wikipedia_image_url,''),attractions.wikipedia_image_url),
 			details_updated_at=COALESCE(EXCLUDED.details_updated_at,attractions.details_updated_at)`, string(data))
 	if err != nil {
 		return fmt.Errorf("import attractions: %w", err)

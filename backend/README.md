@@ -27,7 +27,7 @@ Copy `.env.example` to `.env` only if `.env` does not already exist. Set `DATABA
 | `COOKIE_SECURE` | No | Set `true` for HTTPS deployments; use `false` locally |
 | `APP_ENV` | No | Set `production` in deployment; requires secure cookies and a TLS-only PostgreSQL URL |
 | `TRUSTED_PROXIES` | No | Comma-separated trusted proxy CIDRs; only these peers may supply client IPs through `X-Forwarded-For` |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | No | Configure all five to enable email password reset |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | No | Configure all five to enable email password reset; for Resend use `smtp.resend.com`, port `587` (STARTTLS) or `465` (TLS), username `resend`, and your API key as the password |
 | `OSRM_BASE_URL` | No | OSRM endpoint; defaults to the public OSRM router |
 | `OVERPASS_URL` | No | OpenStreetMap Overpass endpoint used by `cmd/enrichosm`; defaults to the Private.coffee public instance |
 
@@ -37,15 +37,16 @@ From `backend/`:
 
 ```bash
 go run ./cmd/migrate up
-go run ./cmd/enrichosm                 # fetch current visitor details from OSM/Overpass and Wikidata
-go run ./cmd/enrichosm --wikidata-only # refresh descriptions and websites without Overpass
+go run ./cmd/enrichosm                   # fetch visitor details from OSM/Overpass, Wikidata, and linked Wikipedia pages
+go run ./cmd/enrichosm --wikidata-only   # refresh descriptions and websites without Overpass
+go run ./cmd/enrichosm --wikipedia-only  # refresh linked Wikipedia summaries and image URLs without Overpass
 go run ./cmd/importosm                 # optional: import bundled Tamil Nadu data
 go run ./cmd/importosm data/places.json # optional: import another compatible dataset
 go run ./cmd/importosmrestaurants     # fetch and import Tamil Nadu food places into PostGIS
 go run ./cmd/api
 ```
 
-The migration command applies unapplied SQL migrations in filename order, including the PostGIS extension and indexed restaurant table. The PostgreSQL server must include PostGIS, and the migration role must be allowed to enable it. The API does not run migrations automatically. `enrichosm` fetches one batch of current OpenStreetMap tags for the bundled attraction records and updates the JSON dataset; `importosm` then upserts those details into PostgreSQL. `importosmrestaurants` fetches named restaurants, cafes, fast food, food courts, ice cream shops, pubs, and bars within Tamil Nadu from Overpass and upserts their tags and coordinates into PostGIS. Both import commands can be rerun. Restaurant lookup uses the PostGIS geography index and returns the nearest 20 mapped food places within 5 km. OSM does not provide consistent ratings or complete business details; missing fields mean no value was mapped.
+The migration command applies unapplied SQL migrations in filename order, including the PostGIS extension and indexed restaurant table. The PostgreSQL server must include PostGIS, and the migration role must be allowed to enable it. The API does not run migrations automatically. `enrichosm` fetches current OpenStreetMap tags, fills missing descriptions from Wikidata and linked Wikipedia summaries, and caches Wikipedia thumbnail URLs in the JSON dataset; `importosm` then upserts those details into PostgreSQL. Wikipedia image URLs are returned as `wikipedia_image_url` by attraction search and detail endpoints. `importosmrestaurants` fetches named restaurants, cafes, fast food, food courts, ice cream shops, pubs, and bars within Tamil Nadu from Overpass and upserts their tags and coordinates into PostGIS. Both import commands can be rerun. Restaurant lookup uses the PostGIS geography index and returns the nearest 20 mapped food places within 5 km. OSM does not provide consistent ratings or complete business details; missing fields mean no value was mapped.
 
 At startup the API logs database readiness, its listen address, and (when OAuth is enabled) the exact Google callback URI. Each request is logged with its method, path, status, and duration; query strings and credentials are omitted. Check the callback log against the authorized redirect URI in Google Cloud if Google reports `redirect_uri_mismatch`.
 
@@ -98,7 +99,7 @@ GRANT USAGE, SELECT ON SEQUENCE restaurants_id_seq TO tripplanner_importer;
 GRANT USAGE, SELECT ON SEQUENCE attractions_id_seq TO tripplanner_importer;
 ```
 
-Set `DATABASE_URL` to the runtime role, `MIGRATOR_DATABASE_URL` to the schema-owner role, and `IMPORTER_DATABASE_URL` to the importer role. Reapply the table grants when new migrations add runtime tables. Configure SMTP to enable password-reset emails; without it, reset requests return a service-unavailable response and no reset tokens are issued.
+Set `DATABASE_URL` to the runtime role, `MIGRATOR_DATABASE_URL` to the schema-owner role, and `IMPORTER_DATABASE_URL` to the importer role. Reapply the table grants when new migrations add runtime tables. Configure SMTP to enable password-reset emails; without it, reset requests return a service-unavailable response and no reset tokens are issued. Resend's `onboarding@resend.dev` sender is for testing; use a sender address on a domain verified in Resend for normal delivery.
 
 ## Interactive API documentation
 

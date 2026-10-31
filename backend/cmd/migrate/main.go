@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -26,6 +27,7 @@ func run(ctx context.Context, args []string) error {
 	if err := config.LoadDotEnv(".env"); err != nil {
 		return errors.New("could not load backend .env")
 	}
+	log.Printf("migrations: connecting to PostgreSQL")
 	cfg, err := config.Load()
 	if err != nil {
 		return err
@@ -48,5 +50,6 @@ func run(ctx context.Context, args []string) error {
 	if err := db.Apply(ctx, pool, "migrations"); err != nil {
 		return fmt.Errorf("apply database migrations: %w", err)
 	}
+	log.Printf("migrations: all pending migrations applied")
 	return nil
 }

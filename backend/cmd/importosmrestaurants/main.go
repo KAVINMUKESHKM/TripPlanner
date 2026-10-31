@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -55,6 +56,7 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	log.Printf("restaurant import: starting")
 	if err := config.LoadDotEnv(".env"); err != nil {
 		return errors.New("could not load backend .env")
 	}
@@ -66,6 +68,10 @@ func run(ctx context.Context) error {
 	if endpoint == "" {
 		endpoint = defaultOverpassURL
 	}
+	endpointHost := "unknown"
+	if parsedEndpoint, err := url.Parse(endpoint); err == nil && parsedEndpoint.Hostname() != "" {
+		endpointHost = parsedEndpoint.Hostname()
+	}
 	requestCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	query := `[out:json][timeout:180];area["name"="Tamil Nadu"]["admin_level"="4"]["boundary"="administrative"]->.state;(nwr["amenity"~"^(restaurant|cafe|fast_food|food_court|ice_cream|pub|bar)$"]["name"](area.state););out center tags;`
@@ -75,6 +81,7 @@ func run(ctx context.Context) error {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "TripPlanner OSM restaurant importer")
+	log.Printf("restaurant import: fetching Tamil Nadu food places from Overpass host=%s timeout=3m", endpointHost)
 	resp, err := (&http.Client{Timeout: 3 * time.Minute}).Do(req)
 	if err != nil {
 		return fmt.Errorf("request OpenStreetMap restaurants: %w", err)
@@ -87,6 +94,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read Overpass response: %w", err)
 	}
+	log.Printf("restaurant import: Overpass response received bytes=%d", len(body))
 	var result overpassResponse
 	if err := json.Unmarshal(body, &result); err != nil {
 		return fmt.Errorf("decode Overpass response: %w", err)
@@ -121,6 +129,7 @@ func run(ctx context.Context) error {
 	if len(places) == 0 {
 		return errors.New("Overpass returned no named food places for Tamil Nadu")
 	}
+	log.Printf("restaurant import: parsed named food places=%d", len(places))
 	data, err := json.Marshal(places)
 	if err != nil {
 		return fmt.Errorf("encode restaurant data: %w", err)
@@ -129,6 +138,7 @@ func run(ctx context.Context) error {
 	if cfg.ImporterDatabaseURL != "" {
 		databaseURL = cfg.ImporterDatabaseURL
 	}
+	log.Printf("restaurant import: connecting to PostgreSQL")
 	pool, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		return errors.New("database configuration is invalid")
@@ -139,6 +149,7 @@ func run(ctx context.Context) error {
 	if err := pool.Ping(connectCtx); err != nil {
 		return errors.New("database is unavailable")
 	}
+	log.Printf("restaurant import: writing %d places to PostGIS", len(places))
 	tx, err := pool.Begin(ctx)
 	if err != nil {
 		return errors.New("could not begin restaurant import")
@@ -161,7 +172,7 @@ func run(ctx context.Context) error {
 	if err := tx.Commit(ctx); err != nil {
 		return errors.New("could not commit restaurant import")
 	}
-	fmt.Printf("Imported or updated %d OpenStreetMap food places into PostGIS.\n", command.RowsAffected())
+	log.Printf("restaurant import: completed imported_or_updated=%d", command.RowsAffected())
 	return nil
 }
 

@@ -21,4 +21,6 @@ func VerifyPassword(hash, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
-func normalizeEmail(email string) string { return strings.ToLower(strings.TrimSpace(email)) }
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}

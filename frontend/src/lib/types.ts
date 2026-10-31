@@ -27,6 +27,7 @@ export type Attraction = {
   toilets_wheelchair?: string;
   internet_access?: string;
   wikipedia?: string;
+  wikipedia_image_url?: string;
   wikidata?: string;
   details_updated_at?: string;
   image?: string;

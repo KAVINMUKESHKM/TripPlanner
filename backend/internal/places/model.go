@@ -24,6 +24,7 @@ type Attraction struct {
 	ToiletsWheelchair string     `json:"toilets_wheelchair,omitempty"`
 	InternetAccess    string     `json:"internet_access,omitempty"`
 	Wikipedia         string     `json:"wikipedia,omitempty"`
+	WikipediaImageURL string     `json:"wikipedia_image_url,omitempty"`
 	Wikidata          string     `json:"wikidata,omitempty"`
 	DetailsUpdatedAt  *time.Time `json:"details_updated_at,omitempty"`
 }

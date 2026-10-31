@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,10 +35,12 @@ func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 	var userID int64
 	err := h.pool.QueryRow(r.Context(), "SELECT id FROM users WHERE lower(email)=lower($1)", email).Scan(&userID)
 	if errors.Is(err, pgx.ErrNoRows) {
+		log.Printf("auth password reset: no matching account; returning generic response")
 		writeJSON(w, http.StatusAccepted, map[string]string{"message": "If that account exists, password reset instructions will be sent."})
 		return
 	}
 	if err != nil {
+		log.Printf("auth password reset: account lookup failed: %v", err)
 		writeError(w, http.StatusServiceUnavailable, "password reset is temporarily unavailable")
 		return
 	}
@@ -71,9 +74,12 @@ func (h *Handler) forgotPassword(w http.ResponseWriter, r *http.Request) {
 	err = h.smtp.send(mailContext, email, "Reset your Trip Planner password", "Use this single-use link within 30 minutes to reset your password:\r\n\r\n"+resetURL+"\r\n\r\nIf you did not request this, you can ignore this email.")
 	cancel()
 	if err != nil {
+		log.Printf("auth password reset: email delivery failed: %v", err)
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
 		_, _ = h.pool.Exec(cleanupCtx, "DELETE FROM password_reset_tokens WHERE token_hash=$1", hash[:])
 		cleanupCancel()
+	} else {
+		log.Printf("auth password reset: SMTP server accepted reset message")
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"message": "If that account exists, password reset instructions will be sent."})
 }

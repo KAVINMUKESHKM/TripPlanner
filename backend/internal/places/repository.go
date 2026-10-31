@@ -48,7 +48,7 @@ func (r *Repository) Search(ctx context.Context, point providers.Coordinate, rad
 			COALESCE(address,'') AS address,COALESCE(opening_hours,'') AS opening_hours,COALESCE(wheelchair,'') AS wheelchair,
 			COALESCE(website,'') AS website,COALESCE(phone,'') AS phone,COALESCE(fee,'') AS fee,COALESCE(toilets,'') AS toilets,
 			COALESCE(toilets_wheelchair,'') AS toilets_wheelchair,COALESCE(internet_access,'') AS internet_access,
-			COALESCE(wikipedia,'') AS wikipedia,COALESCE(wikidata,'') AS wikidata,details_updated_at,
+			COALESCE(wikipedia,'') AS wikipedia,COALESCE(wikidata,'') AS wikidata,COALESCE(wikipedia_image_url,'') AS wikipedia_image_url,details_updated_at,
 			COALESCE(best_climate,'') AS best_climate,COALESCE(ideal_weather,'') AS ideal_weather,ideal_temp_min,ideal_temp_max,
 			6371.0088 * 2 * asin(sqrt(LEAST(1.0,
 				power(sin(radians(latitude::double precision - $2) / 2), 2) +
@@ -61,7 +61,7 @@ func (r *Repository) Search(ctx context.Context, point providers.Coordinate, rad
 			AND longitude BETWEEN ($1 - $6) AND ($1 + $6)
 			AND ($4='' OR lower(category)=lower($4))
 	)
-	SELECT id,name,description,category,latitude,longitude,source_url,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,details_updated_at,best_climate,ideal_weather,ideal_temp_min,ideal_temp_max FROM candidates
+	SELECT id,name,description,category,latitude,longitude,source_url,address,opening_hours,wheelchair,website,phone,fee,toilets,toilets_wheelchair,internet_access,wikipedia,wikidata,wikipedia_image_url,details_updated_at,best_climate,ideal_weather,ideal_temp_min,ideal_temp_max FROM candidates
 	WHERE distance_km <= $3 ORDER BY distance_km,id LIMIT 200`, point.Longitude, point.Latitude, radiusKM, strings.TrimSpace(category), latDelta, lonDelta)
 	if err != nil {
 		return nil, fmt.Errorf("search attractions: %w", err)
@@ -72,7 +72,7 @@ func (r *Repository) Search(ctx context.Context, point providers.Coordinate, rad
 		var place Attraction
 		var idealTempMin, idealTempMax sql.NullFloat64
 		var detailsUpdatedAt sql.NullTime
-		if err := rows.Scan(&place.ID, &place.Name, &place.Description, &place.Category, &place.Latitude, &place.Longitude, &place.SourceURL, &place.Address, &place.OpeningHours, &place.Wheelchair, &place.Website, &place.Phone, &place.Fee, &place.Toilets, &place.ToiletsWheelchair, &place.InternetAccess, &place.Wikipedia, &place.Wikidata, &detailsUpdatedAt, &place.BestClimate, &place.IdealWeather, &idealTempMin, &idealTempMax); err != nil {
+		if err := rows.Scan(&place.ID, &place.Name, &place.Description, &place.Category, &place.Latitude, &place.Longitude, &place.SourceURL, &place.Address, &place.OpeningHours, &place.Wheelchair, &place.Website, &place.Phone, &place.Fee, &place.Toilets, &place.ToiletsWheelchair, &place.InternetAccess, &place.Wikipedia, &place.Wikidata, &place.WikipediaImageURL, &detailsUpdatedAt, &place.BestClimate, &place.IdealWeather, &idealTempMin, &idealTempMax); err != nil {
 			return nil, fmt.Errorf("read attraction: %w", err)
 		}
 		if idealTempMin.Valid {
@@ -96,7 +96,7 @@ func (r *Repository) Get(ctx context.Context, id int64) (Attraction, error) {
 	var place Attraction
 	var idealTempMin, idealTempMax sql.NullFloat64
 	var detailsUpdatedAt sql.NullTime
-	err := r.pool.QueryRow(ctx, `SELECT id,COALESCE(name,''),COALESCE(description,''),COALESCE(category,''),latitude,longitude,COALESCE(source_url,''),COALESCE(address,''),COALESCE(opening_hours,''),COALESCE(wheelchair,''),COALESCE(website,''),COALESCE(phone,''),COALESCE(fee,''),COALESCE(toilets,''),COALESCE(toilets_wheelchair,''),COALESCE(internet_access,''),COALESCE(wikipedia,''),COALESCE(wikidata,''),details_updated_at,COALESCE(best_climate,''),COALESCE(ideal_weather,''),ideal_temp_min,ideal_temp_max FROM attractions WHERE id=$1`, id).Scan(&place.ID, &place.Name, &place.Description, &place.Category, &place.Latitude, &place.Longitude, &place.SourceURL, &place.Address, &place.OpeningHours, &place.Wheelchair, &place.Website, &place.Phone, &place.Fee, &place.Toilets, &place.ToiletsWheelchair, &place.InternetAccess, &place.Wikipedia, &place.Wikidata, &detailsUpdatedAt, &place.BestClimate, &place.IdealWeather, &idealTempMin, &idealTempMax)
+	err := r.pool.QueryRow(ctx, `SELECT id,COALESCE(name,''),COALESCE(description,''),COALESCE(category,''),latitude,longitude,COALESCE(source_url,''),COALESCE(address,''),COALESCE(opening_hours,''),COALESCE(wheelchair,''),COALESCE(website,''),COALESCE(phone,''),COALESCE(fee,''),COALESCE(toilets,''),COALESCE(toilets_wheelchair,''),COALESCE(internet_access,''),COALESCE(wikipedia,''),COALESCE(wikidata,''),COALESCE(wikipedia_image_url,''),details_updated_at,COALESCE(best_climate,''),COALESCE(ideal_weather,''),ideal_temp_min,ideal_temp_max FROM attractions WHERE id=$1`, id).Scan(&place.ID, &place.Name, &place.Description, &place.Category, &place.Latitude, &place.Longitude, &place.SourceURL, &place.Address, &place.OpeningHours, &place.Wheelchair, &place.Website, &place.Phone, &place.Fee, &place.Toilets, &place.ToiletsWheelchair, &place.InternetAccess, &place.Wikipedia, &place.Wikidata, &place.WikipediaImageURL, &detailsUpdatedAt, &place.BestClimate, &place.IdealWeather, &idealTempMin, &idealTempMax)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Attraction{}, ErrNotFound
 	}

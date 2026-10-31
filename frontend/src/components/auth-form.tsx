@@ -8,6 +8,7 @@ import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Divider from "@mui/material/Divider";
 import TextField from "@mui/material/TextField";
+import { PasswordField } from "@/components/password-field";
 
 export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const router = useRouter();
@@ -37,7 +38,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     <form className="auth-form" onSubmit={submit}>
       {isSignup ? <TextField required fullWidth label="Your name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} /> : null}
       <TextField required fullWidth label="Email address" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-      <TextField required fullWidth label="Password" type="password" helperText="Use at least 8 characters." slotProps={{ htmlInput: { minLength: 8 } }} autoComplete={isSignup ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} />
+      <PasswordField required fullWidth label="Password" helperText="Use at least 8 characters." slotProps={{ htmlInput: { minLength: 8 } }} autoComplete={isSignup ? "new-password" : "current-password"} value={password} onChange={(event) => setPassword(event.target.value)} />
       {error ? <Alert severity="error" role="alert">{error}</Alert> : null}
       <Button className="auth-submit" type="submit" variant="contained" size="large" disabled={busy}>{busy ? "Please wait…" : isSignup ? "Create your account" : "Sign in"}</Button>
       {!isSignup ? <p className="auth-switch"><Link href="/forgot-password">Forgot your password?</Link></p> : null}

@@ -19,6 +19,10 @@ func (c SMTPConfig) enabled() bool {
 	return c.Host != "" && c.Port != "" && c.Username != "" && c.Password != "" && c.From != ""
 }
 
+func usesImplicitTLS(port string) bool {
+	return port == "465" || port == "2465"
+}
+
 func (c SMTPConfig) send(ctx context.Context, to, subject, body string) error {
 	from, err := mail.ParseAddress(c.From)
 	if err != nil || strings.ContainsAny(c.From, "\r\n") {
@@ -33,16 +37,26 @@ func (c SMTPConfig) send(ctx context.Context, to, subject, body string) error {
 	if deadline, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(deadline)
 	}
+	tlsConfig := &tls.Config{ServerName: c.Host, MinVersion: tls.VersionTLS12}
+	if usesImplicitTLS(c.Port) {
+		tlsConn := tls.Client(conn, tlsConfig)
+		if err := tlsConn.HandshakeContext(ctx); err != nil {
+			return fmt.Errorf("start SMTP TLS: %w", err)
+		}
+		conn = tlsConn
+	}
 	client, err := smtp.NewClient(conn, c.Host)
 	if err != nil {
 		return err
 	}
 	defer client.Close()
-	if ok, _ := client.Extension("STARTTLS"); !ok {
-		return fmt.Errorf("SMTP server does not support STARTTLS")
-	}
-	if err := client.StartTLS(&tls.Config{ServerName: c.Host, MinVersion: tls.VersionTLS12}); err != nil {
-		return err
+	if !usesImplicitTLS(c.Port) {
+		if ok, _ := client.Extension("STARTTLS"); !ok {
+			return fmt.Errorf("SMTP server does not support STARTTLS")
+		}
+		if err := client.StartTLS(tlsConfig); err != nil {
+			return err
+		}
 	}
 	if err := client.Auth(smtp.PlainAuth("", c.Username, c.Password, c.Host)); err != nil {
 		return err
